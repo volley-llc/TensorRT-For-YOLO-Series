@@ -6,19 +6,19 @@
 - If you use TRT 8.2 or lower you have to set `nms_fp32` param to True
 - If you use TRT 8.4 or higher you can set `nms_fp32` param to False
 ```
-export.py -o yolov7_e2e.onnx -e yolov7_e2e_fp16.trt -p fp16 --nms_fp32 True
+python3 export.py -o yolov7_e2e.onnx -e yolov7_e2e_fp16.trt -p fp16 --nms_fp32 True
 ```
 ## INT8 TRT model
 ### Model with integrated pre-processing
 - Input of model with integrated pre-processing not requires any-preprocessing of raw image, it all done in computation graph
 - Logic of `nms_fp32` is the same as described aboce
 ```
-export.py -o yolov7_e2e.onnx -e yolov7_e2e_int8.trt -p int8 --nms_fp32 True  --calib_norm_input False --calib_input ./images
+python3 export.py -o yolov7_e2e.onnx -e yolov7_e2e_int8.trt -p int8 --nms_fp32 True --calib_input ./images
 ```
 ### Model without integrated pre-processing
 - Model without integrated pre-processing requires input normalization
 ```
-export.py -o yolov7_nms.onnx -e yolov7_nms_int8.trt -p int8 --nms_fp32 True --calib_norm_input True --calib_input ./images
+python3 export.py -o yolov7_nms.onnx -e yolov7_nms_int8.trt -p int8 --nms_fp32 True --calib_norm_input True --calib_input ./images
 ```
 
 ##  Prepare TRT Env 

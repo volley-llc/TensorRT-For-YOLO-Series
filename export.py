@@ -283,7 +283,7 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable more verbose log output")
     parser.add_argument("-w", "--workspace", default=1, type=int, help="The max memory workspace size to allow in Gb, "
                                                                        "default: 1")
-    parser.add_argument("--nms_fp32", default=True, type=bool, help="If True, NMS layer will use fp32 precision")
+    parser.add_argument("--nms_fp32", default=False, type=bool, help="If True, NMS layer will use fp32 precision")
     parser.add_argument("--calib_input", help="The directory holding images to use for calibration")
     parser.add_argument("--calib_cache", default="./calibration.cache",
                         help="The file path for INT8 calibration cache to use, default: ./calibration.cache")
@@ -291,7 +291,7 @@ if __name__ == "__main__":
                         help="The maximum number of images to use for calibration, default: 5000")
     parser.add_argument("--calib_batch_size", default=8, type=int,
                         help="The batch size for the calibration process, default: 8")
-    parser.add_argument("--calib_norm_input", default=True, type=bool, help="If True, input image will be devided by 255")
+    parser.add_argument("--calib_norm_input", default=False, type=bool, help="If True, input image will be devided by 255")
     parser.add_argument("--end2end", default=False, action="store_true",
                         help="export the engine include nms plugin, default: False")
     parser.add_argument("--conf_thres", default=0.4, type=float,
