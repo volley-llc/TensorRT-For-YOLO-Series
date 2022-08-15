@@ -198,7 +198,7 @@ class EngineBuilder:
 
 
     def create_engine(self, engine_path, precision, calib_input=None, calib_cache=None, calib_num_images=5000,
-                      calib_batch_size=8):
+                      calib_batch_size=8, nms_fp32=True,  normalize_input=True):
         """
         Build the TensorRT engine and serialize it to disk.
         :param engine_path: The path where to serialize the engine to.
@@ -231,14 +231,38 @@ class EngineBuilder:
                     # Also enable fp16, as some layers may be even more efficient in fp16 than int8
                     self.config.set_flag(trt.BuilderFlag.FP16)
                 self.config.set_flag(trt.BuilderFlag.INT8)
-                # self.config.int8_calibrator = EngineCalibrator(calib_cache)
-                self.config.int8_calibrator = SwinCalibrator(calib_cache)
+                self.config.int8_calibrator = EngineCalibrator(calib_cache)
+                #self.config.int8_calibrator = SwinCalibrator(calib_cache)
                 if not os.path.exists(calib_cache):
                     calib_shape = [calib_batch_size] + list(inputs[0].shape[1:])
                     calib_dtype = trt.nptype(inputs[0].dtype)
                     self.config.int8_calibrator.set_image_batcher(
                         ImageBatcher(calib_input, calib_shape, calib_dtype, max_num_images=calib_num_images,
-                                     exact_batches=True))
+                                     exact_batches=True, preprocessor="keep_aspect_ratio_resizer", normalize_input=normalize_input))
+
+        if nms_fp32:
+            # Make NMS to be FP32
+            # https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#reduced-precision
+            self.config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+            
+            # (!) Note:  ONNX classes actually are boxes. ONNX boxes are classes 
+            boxes_layer = next(self.network.get_layer(x) for x in range(self.network.num_layers) 
+                                if self.network.get_layer(x).get_output(0).name == 'classes')
+            assert boxes_layer.get_output(0).shape[-1] == 4
+
+            scores_layer = next(self.network.get_layer(x) for x in range(self.network.num_layers) 
+                                if self.network.get_layer(x).get_output(0).name == 'boxes')
+            assert scores_layer.get_output(0).shape[-1] == 80
+
+            boxes_layer.set_output_type(0, trt.float32)
+            scores_layer.set_output_type(0, trt.float32)
+
+            # https://github.com/NVIDIA/TensorRT/tree/master/plugin/efficientNMSPlugin
+            nms_layer = next(self.network.get_layer(x) for x in range(self.network.num_layers) 
+                                if self.network.get_layer(x).get_input(0) == boxes_layer.get_output(0)
+                                and self.network.get_layer(x).get_input(1) == scores_layer.get_output(0))
+
+            nms_layer.precision = trt.float32
 
         with self.builder.build_engine(self.network, self.config) as engine, open(engine_path, "wb") as f:
             print("Serializing engine to file: {:}".format(engine_path))
@@ -248,7 +272,7 @@ def main(args):
     builder = EngineBuilder(args.verbose, args.workspace)
     builder.create_network(args.onnx, args.end2end, args.conf_thres, args.iou_thres, args.max_det)
     builder.create_engine(args.engine, args.precision, args.calib_input, args.calib_cache, args.calib_num_images,
-                          args.calib_batch_size)
+                          args.calib_batch_size, nms_fp32=args.nms_fp32, normalize_input=args.calib_norm_input)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -259,6 +283,7 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable more verbose log output")
     parser.add_argument("-w", "--workspace", default=1, type=int, help="The max memory workspace size to allow in Gb, "
                                                                        "default: 1")
+    parser.add_argument("--nms_fp32", default=True, type=bool, help="If True, NMS layer will use fp32 precision")
     parser.add_argument("--calib_input", help="The directory holding images to use for calibration")
     parser.add_argument("--calib_cache", default="./calibration.cache",
                         help="The file path for INT8 calibration cache to use, default: ./calibration.cache")
@@ -266,6 +291,7 @@ if __name__ == "__main__":
                         help="The maximum number of images to use for calibration, default: 5000")
     parser.add_argument("--calib_batch_size", default=8, type=int,
                         help="The batch size for the calibration process, default: 8")
+    parser.add_argument("--calib_norm_input", default=True, type=bool, help="If True, input image will be devided by 255")
     parser.add_argument("--end2end", default=False, action="store_true",
                         help="export the engine include nms plugin, default: False")
     parser.add_argument("--conf_thres", default=0.4, type=float,

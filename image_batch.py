@@ -27,7 +27,7 @@ class ImageBatcher:
     Creates batches of pre-processed images.
     """
 
-    def __init__(self, input, shape, dtype, max_num_images=None, exact_batches=False, preprocessor="fixed_shape_resizer"):
+    def __init__(self, input, shape, dtype, max_num_images=None, exact_batches=False, preprocessor="fixed_shape_resizer", normalize_input=False):
         """
         :param input: The input directory to read images from.
         :param shape: The tensor shape of the batch to prepare, either in NCHW or NHWC format.
@@ -37,6 +37,7 @@ class ImageBatcher:
         size. If false, it will pad the final batch with zeros to reach the batch size. If true, it will *remove* the
         last few images in excess of a batch size multiple, to guarantee batches are exact (useful for calibration).
         :param preprocessor: Set the preprocessor to use, depending on which network is being used.
+        :param normalize_input: If True, input image will be divided by 255 during preprocessing
         """
         # Find images in the given input path
         input = os.path.realpath(input)
@@ -99,6 +100,7 @@ class ImageBatcher:
         self.image_index = 0
         self.batch_index = 0
 
+        self.normalize_input = normalize_input
         self.preprocessor = preprocessor
 
     def preprocess_image(self, image_path):
@@ -144,13 +146,18 @@ class ImageBatcher:
         image = image.convert(mode='RGB')
         if self.preprocessor == "fixed_shape_resizer" or self.preprocessor == "keep_aspect_ratio_resizer":
             #Resize & Pad with ImageNet mean values and keep as [0,255] Normalization
-            image, scale = resize_pad(image, (124, 116, 104))
+            image, scale = resize_pad(image, (114, 114, 114))
             image = np.asarray(image, dtype=self.dtype)
         else:
             print("Preprocessing method {} not supported".format(self.preprocessor))
             sys.exit(1)
         if self.format == "NCHW":
             image = np.transpose(image, (2, 0, 1))
+
+
+        if self.normalize_input:
+            image = image / 255.0
+        
         return image, scale
 
     def get_batch(self):
